@@ -7,9 +7,7 @@ int rc_hkdf_sha256(const uint8_t *salt, size_t salt_len,
                    const uint8_t *info, size_t info_len,
                    uint8_t *okm, size_t okm_len) {
     if (!ikm || !okm) return RAVEN_ERR;
-    uint8_t prk[32];
-    uint8_t zero_salt[32];
-    if (!salt) { memset(zero_salt,0,32); salt = zero_salt; salt_len = 32; }
+    uint8_t prk[32]; uint8_t zero_salt[32]; if (!salt) { memset(zero_salt,0,32); salt = zero_salt; salt_len = 32; }
     rc_internal_hmac_sha256(salt, salt_len, ikm, ikm_len, prk);
     size_t n = (okm_len + 31) / 32; if (n > 255) return RAVEN_ERR;
     uint8_t t[32]; uint8_t previous[32]; size_t pos = 0; size_t prev_len = 0;

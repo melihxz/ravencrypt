@@ -1,19 +1,15 @@
 # ravencrypt
 
-ravencrypt — modular C library implementing ChaCha20-Poly1305 AEAD, HKDF-SHA256,
-Poly1305 and utilities. It's written to be auditable, well-documented, and
-self-contained with tests and benchmarks.
+Now includes:
+ - ChaCha20-Poly1305 AEAD (native)
+ - AES-GCM (OpenSSL wrapper; compile with `make OPENSSL=1`)
+ - BLAKE2s (pure C)
 
-## Quickstart
+Build instructions:
+ - Linux (with OpenSSL): `make OPENSSL=1`
+ - Without OpenSSL: `make`
 
-make
-./test_raven
-./bench_raven
+Run tests: `./test_raven`
+Run benchmark: `./bench_raven`
 
-## Notes
-- This implementation focuses on clarity and test coverage. For high-stakes
-  production use prefer audited libraries (libsodium, OpenSSL) or use this
-  project as a learning base.
-- Constant-time improvements and CPU-specific optimizations are included where
-  reasonable (constant-time compare, zeroing secrets). For hardened builds,
-  enable compiler-specific intrinsics / assembly where necessary.
+Security / portability notes: AES-GCM requires linking OpenSSL; BLAKE2s is internal and portable.

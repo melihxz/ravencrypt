@@ -1,6 +1,7 @@
 # Prerequisites
 *.d
-
+test_raven
+bench_raven
 # Object files
 *.o
 *.ko

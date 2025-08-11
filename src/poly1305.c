@@ -2,9 +2,6 @@
 #include <stdint.h>
 #include <string.h>
 
-/* Poly1305 implementation (clear, portable). It is sufficient for test and
- * compatibility. For heavy production consider libsodium's implementation. */
-
 static uint64_t rc_load32_le(const uint8_t *p) { return (uint64_t)p[0] | ((uint64_t)p[1]<<8) | ((uint64_t)p[2]<<16) | ((uint64_t)p[3]<<24); }
 
 void rc_poly1305_mac(const uint8_t key[32], const uint8_t *msg, size_t msg_len, uint8_t out[16]) {

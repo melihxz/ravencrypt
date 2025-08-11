@@ -22,5 +22,25 @@ int main(void) {
     if (d2) { free(d2); free(bad); panic("tamper not detected"); }
     free(bad);
     printf("tamper detection OK.");
+
+    /* AES-GCM (if available) smoke test */
+#ifdef USE_OPENSSL
+    uint8_t aes_key[32]; rc_random_bytes(aes_key,32);
+    uint8_t iv[12]; rc_random_bytes(iv,12);
+    uint8_t *ct = malloc(strlen(msg)); uint8_t tag[16];
+    if (rc_aes_gcm_encrypt(aes_key, 32, iv, NULL,0, (const uint8_t*)msg, strlen(msg), ct, tag) != RAVEN_OK) panic("aes-gcm encrypt");
+    uint8_t *pt = malloc(strlen(msg)); if (rc_aes_gcm_decrypt(aes_key,32, iv, NULL,0, ct, strlen(msg), tag, pt) != RAVEN_OK) panic("aes-gcm decrypt");
+    if (memcmp(pt, msg, strlen(msg)) != 0) panic("aes-gcm mismatch");
+    free(ct); free(pt);
+    printf("AES-GCM smoke OK.
+");
+#else
+    printf("AES-GCM not available (compile with -DUSE_OPENSSL and link -lcrypto to enable).");
+#endif
+
+    /* BLAKE2s smoke test */
+    uint8_t out32[32]; if (rc_blake2s((const uint8_t*)msg, strlen(msg), out32, 32) != RAVEN_OK) panic("blake2s");
+    printf("BLAKE2s OK (first 8 bytes): %02x%02x%02x%02x%02x%02x%02x%02x", out32[0],out32[1],out32[2],out32[3],out32[4],out32[5],out32[6],out32[7]);
+
     return 0;
 }
