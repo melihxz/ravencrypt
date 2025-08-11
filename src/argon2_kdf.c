@@ -27,7 +27,6 @@ raven_error_t raven_kdf_argon2(
             salt,
             t_cost, m_cost,
             crypto_pwhash_ALG_ARGON2ID13) != 0) {
-        // Başarısız oldu
         return RAVEN_ERR_CRYPTO_FAIL;
     }
 

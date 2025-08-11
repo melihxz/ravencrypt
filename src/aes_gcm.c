@@ -67,7 +67,6 @@ raven_error_t aes_gcm_encrypt(
     return RAVEN_OK;
 }
 
-// AES-GCM 256-bit şifre çözme fonksiyonu
 raven_error_t aes_gcm_decrypt(
     const uint8_t *ciphertext,
     size_t ciphertext_len,
