@@ -3,81 +3,129 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <bits/time.h>
+#include <linux/time.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+// Sabitler
+#define RAVEN_KEY_LEN_256 32
+#define RAVEN_NONCE_LEN 12
+#define RAVEN_MAC_LEN 16
 
-#define RAVEN_KEY_BYTES 32
-#define RAVEN_NONCE_BYTES 12
-#define RAVEN_TAG_BYTES 16
+// Hata kodları
+typedef enum {
+    RAVEN_OK = 0,
+    RAVEN_ERR_NULL_POINTER,
+    RAVEN_ERR_MEMORY,
+    RAVEN_ERR_CRYPTO_FAIL,
+    RAVEN_ERR_INVALID_PARAM,
+} raven_error_t;
 
-#define RAVEN_OK 0
-#define RAVEN_ERR -1
-#define RAVEN_INVALID 1
+// Şifreleme algoritmaları
+typedef enum {
+    RAVEN_CIPHER_AES_GCM = 1,
+    RAVEN_CIPHER_CHACHA20_POLY1305 = 2,
+} raven_cipher_t;
 
-/* Initialization */
-int rc_init(void);
-int rc_random_bytes(uint8_t *out, size_t n);
+// Anahtar yapısı
+typedef struct {
+    uint8_t key[RAVEN_KEY_LEN_256];
+    size_t key_len;
+} raven_key_t;
 
-/* Utilities (exposed for modular build) */
-void rc_secure_zero(void *p, size_t n);
-char *rc_b64url_encode_alloc(const uint8_t *in, size_t inlen);
-uint8_t *rc_b64url_decode_alloc(const char *in, size_t *outlen);
-uint8_t rc_checksum8(const uint8_t *d, size_t n);
-int rc_safe_memcmp(const void *a, const void *b, size_t n);
+// Şifrelenmiş çıktı yapısı
+typedef struct {
+    uint8_t *ciphertext;
+    size_t ciphertext_len;
 
-/* Internal HMAC hook (used by HKDF) */
-void rc_internal_hmac_sha256(const uint8_t *key, size_t key_len, const uint8_t *msg, size_t msg_len, uint8_t out[32]);
+    uint8_t mac[RAVEN_MAC_LEN];
+    uint8_t nonce[RAVEN_NONCE_LEN];
+} raven_encrypted_t;
 
-/* AEAD (ChaCha20-Poly1305) */
-int rc_aead_encrypt(const uint8_t key[RAVEN_KEY_BYTES],
-                    const uint8_t nonce[RAVEN_NONCE_BYTES],
-                    const uint8_t *aad, size_t aad_len,
-                    const uint8_t *plaintext, size_t plaintext_len,
-                    uint8_t *ciphertext, uint8_t tag[RAVEN_TAG_BYTES]);
+// Oturum anahtarı yapısı (forward secrecy için)
+typedef struct {
+    uint8_t session_key[RAVEN_KEY_LEN_256];
+    size_t key_len;
+    uint64_t session_id;
+} raven_session_key_t;
 
-int rc_aead_decrypt(const uint8_t key[RAVEN_KEY_BYTES],
-                    const uint8_t nonce[RAVEN_NONCE_BYTES],
-                    const uint8_t *aad, size_t aad_len,
-                    const uint8_t *ciphertext, size_t ciphertext_len,
-                    const uint8_t tag[RAVEN_TAG_BYTES],
-                    uint8_t *plaintext_out);
+// Hibrit şifreleme yapısı
+typedef struct {
+    raven_encrypted_t aes_part;
+    raven_encrypted_t chacha_part;
+} raven_hybrid_encrypted_t;
 
-/* AES-GCM (wrapper: OpenSSL if available). Non-OpenSSL builds will return RAVEN_ERR.
- * key must be 16/24/32 bytes depending on AES-128/192/256.
- */
-int rc_aes_gcm_encrypt(const uint8_t *key, size_t key_len,
-                       const uint8_t iv[12],
-                       const uint8_t *aad, size_t aad_len,
-                       const uint8_t *plaintext, size_t plaintext_len,
-                       uint8_t *ciphertext, uint8_t tag[16]);
+// API Fonksiyonları
 
-int rc_aes_gcm_decrypt(const uint8_t *key, size_t key_len,
-                       const uint8_t iv[12],
-                       const uint8_t *aad, size_t aad_len,
-                       const uint8_t *ciphertext, size_t ciphertext_len,
-                       const uint8_t tag[16], uint8_t *plaintext_out);
+// Genel şifreleme ve şifre çözme
+raven_error_t raven_encrypt(
+    raven_cipher_t cipher,
+    const uint8_t *plaintext,
+    size_t plaintext_len,
+    const raven_key_t *key,
+    raven_encrypted_t *output
+);
 
-/* BLAKE2s hashing function (pure C, produces up to 32-byte output) */
-int rc_blake2s(const uint8_t *in, size_t inlen, uint8_t *out32, size_t outlen);
+raven_error_t raven_decrypt(
+    raven_cipher_t cipher,
+    const uint8_t *ciphertext,
+    size_t ciphertext_len,
+    const uint8_t mac[RAVEN_MAC_LEN],
+    const uint8_t nonce[RAVEN_NONCE_LEN],
+    const raven_key_t *key,
+    uint8_t *plaintext,
+    size_t *plaintext_len
+);
 
-/* High-level armor helpers */
-char *rc_armor_encrypt(const uint8_t key[RAVEN_KEY_BYTES],
-                       const uint8_t *aad, size_t aad_len,
-                       const uint8_t *plaintext, size_t plaintext_len);
+// Argon2 KDF prototipi
+raven_error_t raven_kdf_argon2(
+    const uint8_t *password,
+    size_t password_len,
+    const uint8_t *salt,
+    size_t salt_len,
+    uint8_t *out_key,
+    size_t out_key_len
+);
 
-uint8_t *rc_unarmor_decrypt(const uint8_t key[RAVEN_KEY_BYTES],
-                            const char *armor, size_t *plaintext_len_out);
 
-/* HKDF */
-int rc_hkdf_sha256(const uint8_t *salt, size_t salt_len,
-                   const uint8_t *ikm, size_t ikm_len,
-                   const uint8_t *info, size_t info_len,
-                   uint8_t *okm, size_t okm_len);
+// KDF: HKDF (SHA256 tabanlı)
+raven_error_t raven_kdf_hkdf(
+    const uint8_t *ikm,
+    size_t ikm_len,
+    const uint8_t *salt,
+    size_t salt_len,
+    const uint8_t *info,
+    size_t info_len,
+    uint8_t *out_key,
+    size_t out_key_len
+);
 
-#ifdef __cplusplus
-}
-#endif
+// Oturum anahtarı oluşturma ve temizleme
+raven_error_t raven_generate_session_key(
+    const raven_key_t *master_key,
+    raven_session_key_t *session_key,
+    uint64_t session_id
+);
 
-#endif /* RAVENCRYPT_H */
+void raven_session_key_free(raven_session_key_t *session_key);
+
+// Hibrit şifreleme API'si
+raven_error_t raven_hybrid_encrypt(
+    const uint8_t *plaintext,
+    size_t plaintext_len,
+    const raven_key_t *key1,
+    const raven_key_t *key2,
+    raven_hybrid_encrypted_t *output
+);
+
+raven_error_t raven_hybrid_decrypt(
+    const raven_hybrid_encrypted_t *input,
+    const raven_key_t *key1,
+    const raven_key_t *key2,
+    uint8_t *plaintext,
+    size_t *plaintext_len
+);
+
+// Yardımcı fonksiyonlar
+void raven_secure_zero(void *ptr, size_t len);
+
+#endif // RAVENCRYPT_H

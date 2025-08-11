@@ -7,7 +7,7 @@ bench_raven
 *.ko
 *.obj
 *.elf
-
+.vscode
 # Linker output
 *.ilk
 *.map

@@ -2,9 +2,8 @@
 #include <openssl/evp.h>
 #include <openssl/rand.h>
 #include <stdlib.h>
-#include <string.h>
 
-raven_error_t aes_gcm_encrypt(
+raven_error_t chacha20_poly1305_encrypt(
     const uint8_t *plaintext,
     size_t plaintext_len,
     const uint8_t key[RAVEN_KEY_LEN_256],
@@ -20,7 +19,7 @@ raven_error_t aes_gcm_encrypt(
         return RAVEN_ERR_CRYPTO_FAIL;
     }
 
-    if (EVP_EncryptInit_ex(ctx, EVP_aes_256_gcm(), NULL, NULL, NULL) != 1) {
+    if (EVP_EncryptInit_ex(ctx, EVP_chacha20_poly1305(), NULL, NULL, NULL) != 1) {
         EVP_CIPHER_CTX_free(ctx);
         return RAVEN_ERR_CRYPTO_FAIL;
     }
@@ -35,7 +34,7 @@ raven_error_t aes_gcm_encrypt(
         return RAVEN_ERR_CRYPTO_FAIL;
     }
 
-    int outlen = (int)plaintext_len + EVP_CIPHER_block_size(EVP_aes_256_gcm());
+    int outlen = (int)plaintext_len + EVP_CIPHER_block_size(EVP_chacha20_poly1305());
     output->ciphertext = (uint8_t*)malloc(outlen);
     if (!output->ciphertext) {
         EVP_CIPHER_CTX_free(ctx);
@@ -67,8 +66,7 @@ raven_error_t aes_gcm_encrypt(
     return RAVEN_OK;
 }
 
-// AES-GCM 256-bit şifre çözme fonksiyonu
-raven_error_t aes_gcm_decrypt(
+raven_error_t chacha20_poly1305_decrypt(
     const uint8_t *ciphertext,
     size_t ciphertext_len,
     const uint8_t key[RAVEN_KEY_LEN_256],
@@ -83,7 +81,7 @@ raven_error_t aes_gcm_decrypt(
     EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
     if (!ctx) return RAVEN_ERR_MEMORY;
 
-    if (EVP_DecryptInit_ex(ctx, EVP_aes_256_gcm(), NULL, NULL, NULL) != 1) {
+    if (EVP_DecryptInit_ex(ctx, EVP_chacha20_poly1305(), NULL, NULL, NULL) != 1) {
         EVP_CIPHER_CTX_free(ctx);
         return RAVEN_ERR_CRYPTO_FAIL;
     }

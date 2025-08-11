@@ -1,46 +1,96 @@
-#include "ravencrypt.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include "ravencrypt.h"
 
-static void panic(const char *m) { fprintf(stderr, "TEST FAIL: %s", m); exit(2); }
+void print_hex(const char *label, const uint8_t *data, size_t len) {
+    printf("%s:", label);
+    for (size_t i = 0; i < len; i++) {
+        printf(" %02x", data[i]);
+    }
+    printf("\n");
+}
 
-int main(void) {
-    rc_init();
-    uint8_t key[32]; if (rc_random_bytes(key,32) != RAVEN_OK) panic("random key");
-    const char *msg = "The quick brown fox jumps over the lazy dog";
-    char *armor = rc_armor_encrypt(key, NULL, 0, (const uint8_t*)msg, strlen(msg));
-    if (!armor) panic("armor encrypt failed");
-    printf("armor: %s", armor);
-    size_t mlen; uint8_t *dec = rc_unarmor_decrypt(key, armor, &mlen);
-    if (!dec) panic("unarmor decrypt failed");
-    if (mlen != strlen(msg) || memcmp(dec, msg, mlen) != 0) panic("plaintext mismatch");
-    printf("roundtrip OK.");
-    free(armor); free(dec);
-    /* tamper detection */
-    char *bad = strdup("RAV1|AAAA|BBBB|CCCC|00"); uint8_t *d2 = rc_unarmor_decrypt(key, bad, &mlen);
-    if (d2) { free(d2); free(bad); panic("tamper not detected"); }
-    free(bad);
-    printf("tamper detection OK.");
+int main() {
+    printf("Ravencrypt test starting...\n");
 
-    /* AES-GCM (if available) smoke test */
-#ifdef USE_OPENSSL
-    uint8_t aes_key[32]; rc_random_bytes(aes_key,32);
-    uint8_t iv[12]; rc_random_bytes(iv,12);
-    uint8_t *ct = malloc(strlen(msg)); uint8_t tag[16];
-    if (rc_aes_gcm_encrypt(aes_key, 32, iv, NULL,0, (const uint8_t*)msg, strlen(msg), ct, tag) != RAVEN_OK) panic("aes-gcm encrypt");
-    uint8_t *pt = malloc(strlen(msg)); if (rc_aes_gcm_decrypt(aes_key,32, iv, NULL,0, ct, strlen(msg), tag, pt) != RAVEN_OK) panic("aes-gcm decrypt");
-    if (memcmp(pt, msg, strlen(msg)) != 0) panic("aes-gcm mismatch");
-    free(ct); free(pt);
-    printf("AES-GCM smoke OK.
-");
-#else
-    printf("AES-GCM not available (compile with -DUSE_OPENSSL and link -lcrypto to enable).");
-#endif
+    // Anahtar oluştur
+    raven_key_t key = {0};
+    for (size_t i = 0; i < RAVEN_KEY_LEN_256; i++) {
+        key.key[i] = (uint8_t)i;
+    }
+    key.key_len = RAVEN_KEY_LEN_256;
 
-    /* BLAKE2s smoke test */
-    uint8_t out32[32]; if (rc_blake2s((const uint8_t*)msg, strlen(msg), out32, 32) != RAVEN_OK) panic("blake2s");
-    printf("BLAKE2s OK (first 8 bytes): %02x%02x%02x%02x%02x%02x%02x%02x", out32[0],out32[1],out32[2],out32[3],out32[4],out32[5],out32[6],out32[7]);
+    const char *plaintext = "Hi world!";
+    size_t plaintext_len = strlen(plaintext);
 
+    raven_encrypted_t encrypted = {0};
+
+    // AES-GCM ile şifrele
+    if (raven_encrypt(RAVEN_CIPHER_AES_GCM, (const uint8_t*)plaintext, plaintext_len, &key, &encrypted) != RAVEN_OK) {
+        printf("Unsuccessful!\n");
+        return 1;
+    }
+    print_hex("AES-GCM ECrypted", encrypted.ciphertext, encrypted.ciphertext_len);
+    print_hex("AES-GCM MAC", encrypted.mac, RAVEN_MAC_LEN);
+    print_hex("AES-GCM Nonce", encrypted.nonce, RAVEN_NONCE_LEN);
+
+    uint8_t *decrypted = malloc(plaintext_len + 1);
+    size_t decrypted_len = 0;
+
+    // AES-GCM ile şifre çöz
+    if (raven_decrypt(RAVEN_CIPHER_AES_GCM,
+                      encrypted.ciphertext,
+                      encrypted.ciphertext_len,
+                      encrypted.mac,
+                      encrypted.nonce,
+                      &key,
+                      decrypted,
+                      &decrypted_len) != RAVEN_OK) {
+        printf("AES-GCM unsuccessful!\n");
+        free(encrypted.ciphertext);
+        free(decrypted);
+        return 1;
+    }
+    decrypted[decrypted_len] = 0;
+    printf("AES-GCM Dcrypted: %s\n", decrypted);
+
+    free(encrypted.ciphertext);
+    free(decrypted);
+
+    // Aynı işlemi ChaCha20-Poly1305 için yapalım
+    raven_encrypted_t chacha_encrypted = {0};
+
+    if (raven_encrypt(RAVEN_CIPHER_CHACHA20_POLY1305, (const uint8_t*)plaintext, plaintext_len, &key, &chacha_encrypted) != RAVEN_OK) {
+        printf("ChaCha20-Poly1305 crpyting unsuccesful!\n");
+        return 1;
+    }
+    print_hex("ChaCha20-Poly1305 Ecrypted", chacha_encrypted.ciphertext, chacha_encrypted.ciphertext_len);
+    print_hex("ChaCha20-Poly1305 MAC", chacha_encrypted.mac, RAVEN_MAC_LEN);
+    print_hex("ChaCha20-Poly1305 Nonce", chacha_encrypted.nonce, RAVEN_NONCE_LEN);
+
+    decrypted = malloc(plaintext_len + 1);
+    decrypted_len = 0;
+
+    if (raven_decrypt(RAVEN_CIPHER_CHACHA20_POLY1305,
+                      chacha_encrypted.ciphertext,
+                      chacha_encrypted.ciphertext_len,
+                      chacha_encrypted.mac,
+                      chacha_encrypted.nonce,
+                      &key,
+                      decrypted,
+                      &decrypted_len) != RAVEN_OK) {
+        printf("ChaCha20-Poly1305 unsuccessful!\n");
+        free(chacha_encrypted.ciphertext);
+        free(decrypted);
+        return 1;
+    }
+    decrypted[decrypted_len] = 0;
+    printf("ChaCha20-Poly1305 Dcrypted: %s\n", decrypted);
+
+    free(chacha_encrypted.ciphertext);
+    free(decrypted);
+
+    printf("Tests are good.\n");
     return 0;
 }
